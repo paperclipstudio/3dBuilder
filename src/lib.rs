@@ -1,132 +1,216 @@
 #![allow(dead_code)]
-// Templating
-//
-//
-struct Union<T, U> {
-    phantom_data: T,
-    phantom_data2: U,
+#![feature(generic_const_exprs)]
+
+use std::{marker::PhantomData, ops::Add};
+
+pub struct Union<T, U> {
+    phantom_data: PhantomData<T>,
+    phantom_data2: PhantomData<U>,
 }
 
 impl<T, U> Union<T, U>
 where
-    T: Other,
+    T: SItem,
 {
-    fn new(inner: T, other: U) -> Union<T, U> {
+    fn new() -> Union<T, U> {
         Union::<T, U> {
-            phantom_data: inner,
-            phantom_data2: other,
+            phantom_data: PhantomData,
+            phantom_data2: PhantomData,
         }
     }
 }
 
-impl<X, Y> Other for Union<X, Y>
+impl<X, Y> SItem for Union<X, Y>
 where
-    X: Other,
-    Y: Other,
+    X: SItem,
+    Y: SItem,
 {
     fn print() -> String {
         format!("union() {{\n{} \n{}}}", X::print(), Y::print())
     }
+
+    fn new() -> Self {
+        Self {
+            phantom_data: PhantomData::<X>,
+            phantom_data2: PhantomData::<Y>,
+        }
+    }
+
+         fn to_dynamic() -> Dynamic {
+        Dynamic::Solid(Solid::Add(
+            Box::new(X::to_dynamic().unwrap_solid()),
+            Box::new(Y::to_dynamic().unwrap_solid()),
+        ))
+    }
 }
 
-struct Test<const X: u8, const Y: u8> {}
+pub struct Test<const X: u8, const Y: u8> {}
+
 
 impl<const X: u8, const Y: u8> Test<X, Y> {
     fn new() -> Test<X, Y> {
         Test {}
     }
 }
-
-trait Other: Sized {
-    fn func(self) -> impl Other {
-        Func::<Self>::new(self)
+pub trait SSolid: SItem {
+    fn tran<const X: i8, const Y: i8>(self) -> Tran<X, Y, Self> {
+        Tran::<X, Y, Self>::new()
     }
+}
+pub trait SPlane: SItem {
+    fn tran<const X: i8, const Y: i8>(self) -> Tran<X, Y, Self> {
+        Tran::<X, Y, Self>::new()
+    }
+}
 
-    fn func2(self) -> impl Other
+pub trait SItem: Sized {
+    fn rot(self) -> Rot<Self>
     where
         Self: Sized,
     {
-        Func2::<Self>::new(self)
+        Rot::<Self>::new()
     }
 
     fn print() -> String;
+    fn new() -> Self;
+    fn to_dynamic() -> Dynamic;
 
     fn print2(&self) -> String {
         Self::print()
     }
 
-    fn add<T: Other>(self, rhs: T) -> Union<Self, T> {
-        Union::<Self, T>::new(self, rhs)
+    fn add<T: SItem>(self, _: T) -> Union<Self, T> {
+        Union::<Self, T>::new()
+    }
+
+    fn into<T: SItem>(self) -> T {
+        T::new()
     }
 }
 
-struct Func<T> {
-    phantom_data: T,
+pub struct Tran<const X: i8, const Y: i8, T> {
+    phantom_data1: std::marker::PhantomData<T>,
 }
 
-impl<T> Func<T>
-where
-    T: Other,
+impl<T: SItem, const X1: i8, const X2: i8, const Y1: i8, const Y2: i8>
+    Tran<X1, Y1, Tran<X2, Y2, T>>
 {
-    fn new(inner: T) -> Func<T> {
-        Func::<T> {
-            phantom_data: inner,
+    fn reduce(self) -> Tran<{ X1 + X2 }, { Y1 + Y2 }, T> {
+        Tran::<{ X1 + X2 }, { Y1 + Y2 }, T>::new()
+    }
+}
+
+impl<const X: i8, const Y: i8, T> Tran<X, Y, T>
+where
+    T: SItem,
+{
+    fn new() -> Tran<X, Y, T> {
+        Tran::<X, Y, T> {
+            phantom_data1: PhantomData,
         }
     }
 }
 
-struct Func2<T> {
-    phantom_data: T,
+pub struct Rot<T> {
+    phantom_data: std::marker::PhantomData<T>,
 }
 
-impl<T> Func2<T>
+impl<T> Rot<T>
 where
-    T: Other,
+    T: SItem,
 {
-    fn new(inner: T) -> Func2<T> {
-        Func2::<T> {
-            phantom_data: inner,
+    fn new() -> Rot<T> {
+        Rot::<T> {
+            phantom_data: PhantomData,
         }
     }
 }
 
-struct Circle<const X: u8> {}
-impl<const X: u8> Circle<X> {
+impl<T> SSolid for Rot<T>
+where
+    T: SItem,
+{}
+
+struct Circle<const X: i8> {}
+
+impl<const X: i8> Circle<X> {
     fn new() -> Circle<X> {
         Circle::<X> {}
     }
 }
 
-impl<const X: u8> Other for Circle<{ X }> {
+impl<const X: i8> SItem for Circle<{ X }> {
     fn print() -> String {
-        format!("circle({})", X)
+        format!("circle({});", X)
+    }
+
+    fn new() -> Self {
+        Circle::<X> {}
+    }
+
+    fn to_dynamic() -> Dynamic {
+        Dynamic::Plane(Plane::Circle(X as f32))
     }
 }
 
-impl<T: Other> Other for Func<T> {
+impl<const X: i8> SPlane for Circle<{ X }> {}
+
+impl<const X: i8, const Y:i8, T: SItem> SItem for Tran<X,Y,T> {
     fn print() -> String {
         format!("Translate() {}", T::print())
     }
+
+    fn new() -> Self {
+        Tran::<X,Y,T> {
+            phantom_data1: PhantomData,
+        }
+    }
+
+    fn to_dynamic() -> Dynamic {
+        Dynamic::Plane(Plane::Transform(Box::new(T::to_dynamic().unwrap_plane()), Vec2::new(X as f32,Y as f32)))
+    }
 }
 
-impl<T: Other> Other for Func2<T> {
+impl<const X: i8, const Y:i8, T: SItem> SPlane for Tran<X,Y,T> {}
+
+impl<T: SItem> SItem for Rot<T> {
     fn print() -> String {
         format!("Rotate() {}", T::print())
     }
+
+    fn new() -> Self {
+        Rot::<T> {
+            phantom_data: PhantomData,
+        }
+    }
+    fn to_dynamic() -> Dynamic {
+        Dynamic::Solid(Solid::Rotate(Box::new(T::to_dynamic().unwrap_solid()), 0.0))
+    }
 }
 
-#[unsafe(no_mangle)]
 fn test() -> String {
     let a = Test::<3, 4> {};
-    let b = a.func().func2().func().func2();
-    let c = (Circle::<3> {}).func2().func().func2();
+    let b = a.tran::<1,3>().rot().tran::<4,3>().rot();
+    let c = (Circle::<3> {}).rot().tran::<2,2>().rot();
     b.print2() + "\n" + &c.print2()
 }
 
-impl<const X: u8, const Y: u8> Other for Test<{ X }, Y> {
+impl<const X: u8, const Y: u8> SItem for Test<{ X }, Y> {
     fn print() -> String {
         "test();".to_string()
     }
+
+    fn new() -> Self {
+        Self {}
+    }
+
+    fn to_dynamic() -> Dynamic {
+        Dynamic::Plane(Plane::Circle(4.0))
+    }
+
+}
+impl<const X: u8, const Y: u8> SSolid for Test<{ X }, Y> {
+
 }
 
 #[inline(never)]
@@ -139,7 +223,9 @@ fn add(a: u8, b: u8) -> u8 {
 //
 //
 
-struct Vec2 {
+type Vec1 = f32;
+
+pub struct Vec2 {
     x: f32,
     y: f32,
 }
@@ -150,7 +236,7 @@ impl Vec2 {
     }
 }
 
-struct Vec3 {
+pub struct Vec3 {
     x: f32,
     y: f32,
     z: f32,
@@ -166,9 +252,31 @@ trait Scad {
     fn to_scad(&self) -> String;
 }
 
-enum Solid {
+pub enum Dynamic {
+    Solid(Solid),
+    Plane(Plane),
+}
+
+impl Dynamic {
+    fn unwrap_solid(self) -> Solid {
+        match self {
+            Dynamic::Solid(s) => s,
+            Dynamic::Plane(_) => panic!(),
+        }
+    }
+
+    fn unwrap_plane(self) -> Plane {
+        match self {
+            Dynamic::Plane(p) => p,
+            Dynamic::Solid(_) => panic!(),
+        }
+    }
+}
+
+pub enum Solid {
     Extrude(Box<Plane>, f32),
     RotateExtrude(Box<Plane>, f32),
+    Rotate(Box<Solid>, f32),
     Sphere(Vec3),
     Cube(Vec3),
     Transform(Box<Solid>, Vec3),
@@ -199,17 +307,21 @@ impl Solid {
             Self::RotateExtrude(inner, angle) => {
                 format!("rotate_extrude({angle}) {{ {} }}", inner.to_scad(),)
             }
+            Self::Rotate(inner, angle) => {
+                format!("rotate({angle}) {{ {} }}", inner.to_scad(),)
+            }
         }
     }
 }
 
-enum Plane {
+pub enum Plane {
     Square(Vec2),
-    Circle(Vec2),
+    Circle(Vec1),
     Transform(Box<Plane>, Vec2),
     Scale(Box<Plane>, Vec2),
     Add(Box<Plane>, Box<Plane>),
     Sub(Box<Plane>, Box<Plane>),
+    Nest(&'static Plane),
 }
 
 impl Plane {
@@ -236,7 +348,7 @@ impl Plane {
     fn to_scad(&self) -> String {
         match self {
             Self::Square(size) => format!("square([{},{}]);", size.x, size.y),
-            Self::Circle(size) => format!("circle([{},0]);", size.x),
+            Self::Circle(size) => format!("circle([{},0]);", size),
             Self::Transform(inner, vec) => {
                 format!("transform([{},{}]) {}", vec.x, vec.y, inner.to_scad())
             }
@@ -249,11 +361,14 @@ impl Plane {
             Self::Sub(lhs, rhs) => {
                 format!("difference() {{ {}  {} }}", lhs.to_scad(), rhs.to_scad())
             }
+
+            Self::Nest(inner) => inner.to_scad()
+                
         }
     }
 }
 
-impl std::ops::Add for Plane {
+impl Add for Plane {
     type Output = Plane;
 
     fn add(self, rhs: Self) -> Self::Output {
@@ -269,15 +384,16 @@ impl std::ops::Sub for Plane {
     }
 }
 
+trait MyOther: SItem {
+    fn mirror_dup<T: SItem + Clone>(input: T) -> Union<T, T> {
+        input.clone().add(input)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
     #[test]
     fn make_square() {
         let square = Plane::square(Vec2::new(4.0, 4.0));
@@ -298,11 +414,11 @@ mod tests {
     #[test]
     fn make_square_2() {
         let b = Circle::<5>::new();
-        let a = Test::<3, 4>::new().func().func2().add(b).func();
+        let a = Test::<3, 4>::new().tran::<1,3>().rot().add(b);
 
         assert_eq!(
             a.print2(),
-            "linear_extrude(4) transform([3,40]) scale([3,4]) transform([3,4]) scale([3,4]) transform([12,32]) square([4,4]);"
+            "Translate() union() {\nRotate() Translate() test(); \ncircle(5);}"
         );
     }
 
@@ -311,4 +427,28 @@ mod tests {
         let square = Plane::square(Vec2::new(4.0, 4.0)).transform(3.0, 3.0);
         assert_eq!(square.to_scad(), "transform([3,3]) square([4,4]);");
     }
+
+    #[test]
+    fn recursion() {
+        fn donut<const N: i8, const X:i8, const Y:i8>() -> Tran<X,Y, Circle<N>> {
+            Circle::<N>::new().tran::<X,Y>()
+        }
+
+    }
+    #[test]
+    fn zero_sized() {
+        assert_eq!(0, size_of::<Rot<Tran<3,4, Circle<4>>>>());
+    }
+
+    #[test]
+    fn basic_print() {
+        let a = Circle::<2>::new().tran::<3,4>();
+        assert_eq!("Translate() circle(2);", a.print2());
+    }
+
+    #[test]
+    fn reduce() {
+        let _: Tran<5,5, Circle<2>> = Circle::<2>::new().tran::<3,4>().tran::<2,1>().reduce();
+    }
+
 }
