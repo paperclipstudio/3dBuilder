@@ -37,10 +37,7 @@ where
     }
 
     fn to_dynamic() -> Dynamic {
-        Dynamic::Solid(Solid::Add(
-            Box::new(X::to_dynamic().unwrap_solid().unwrap()),
-            Box::new(Y::to_dynamic().unwrap_solid().unwrap()),
-        ))
+        Dynamic::Solid(Solid::Add(vec![X::to_dynamic().unwrap_solid().unwrap()]))
     }
 }
 

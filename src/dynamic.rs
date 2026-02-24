@@ -61,7 +61,7 @@ pub enum Solid {
     Cube(Vec3),
     Transform(Box<Solid>, Vec3),
     Scale(Box<Solid>, Vec3),
-    Add(Box<Solid>, Box<Solid>),
+    Add(Vec<Solid>),
     Sub(Box<Solid>, Box<Solid>),
 }
 impl Solid {
@@ -78,8 +78,15 @@ impl Solid {
             Self::Scale(inner, vec) => {
                 format!("scale([{},{}]) {}", vec.x, vec.y, inner.to_scad())
             }
-            Self::Add(lhs, rhs) => {
-                format!("union() {{ {}  {} }}", lhs.to_scad(), rhs.to_scad())
+            Self::Add(lhs) => {
+                format!(
+                    "union() {{ {} }}",
+                    lhs.iter()
+                        .map(|solid| solid.to_scad())
+                        .reduce(|acc, a| acc + "\n" + a.as_str())
+                        .unwrap()
+                        .to_owned()
+                )
             }
             Self::Sub(lhs, rhs) => {
                 format!("difference() {{ {}  {} }}", lhs.to_scad(), rhs.to_scad())
@@ -99,7 +106,7 @@ pub enum Plane {
     Circle(Vec1),
     Transform(Box<Plane>, Vec2),
     Scale(Box<Plane>, Vec2),
-    Add(Box<Plane>, Box<Plane>),
+    Add(Vec<Plane>),
     Sub(Box<Plane>, Box<Plane>),
     Nest(&'static Plane),
 }
@@ -140,8 +147,15 @@ impl Plane {
             Self::Scale(inner, vec) => {
                 format!("scale([{},{}]) {}", vec.x, vec.y, inner.to_scad())
             }
-            Self::Add(lhs, rhs) => {
-                format!("union() {{ {}  {} }}", lhs.to_scad(), rhs.to_scad())
+            Self::Add(lhs) => {
+                format!(
+                    "union() {{ {} }}",
+                    lhs.iter()
+                        .map(|solid| solid.to_scad())
+                        .reduce(|acc, a| acc + "\n" + a.as_str())
+                        .unwrap()
+                        .to_owned()
+                )
             }
             Self::Sub(lhs, rhs) => {
                 format!("difference() {{ {}  {} }}", lhs.to_scad(), rhs.to_scad())
@@ -156,7 +170,13 @@ impl Add for Plane {
     type Output = Plane;
 
     fn add(self, rhs: Self) -> Self::Output {
-        Plane::Add(Box::new(self), Box::new(rhs))
+        match self {
+            Plane::Add(mut vec) => {
+                vec.push(rhs);
+                Plane::Add(vec)
+            }
+            _ => Plane::Add(vec![rhs]),
+        }
     }
 }
 
