@@ -175,7 +175,7 @@ impl<T: SItem> SItem for Rot<T> {
     fn to_dynamic() -> Dynamic {
         Dynamic::Solid(Solid::Rotate(
             Box::new(T::to_dynamic().unwrap_solid().unwrap()),
-            0.0,
+            Vec3::new(0.0, 0.0, 0.0),
         ))
     }
 }

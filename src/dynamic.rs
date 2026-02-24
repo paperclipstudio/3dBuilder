@@ -14,6 +14,9 @@ impl Vec2 {
     pub fn new(x: f32, y: f32) -> Vec2 {
         Vec2 { x, y }
     }
+    pub fn to_scad(&self) -> String {
+        format!("[{},{}]", self.x, self.y)
+    }
 }
 
 pub struct Vec3 {
@@ -25,6 +28,10 @@ pub struct Vec3 {
 impl Vec3 {
     pub fn new(x: f32, y: f32, z: f32) -> Vec3 {
         Vec3 { x, y, z }
+    }
+
+    pub fn to_scad(&self) -> String {
+        format!("[{}, {},{}]", self.x, self.y, self.z)
     }
 }
 
@@ -56,21 +63,45 @@ impl Dynamic {
 pub enum Solid {
     Extrude(Box<Plane>, f32),
     RotateExtrude(Box<Plane>, f32),
-    Rotate(Box<Solid>, f32),
-    Sphere(Vec3),
+    Rotate(Box<Solid>, Vec3),
+    Sphere(Vec1),
     Cube(Vec3),
     Transform(Box<Solid>, Vec3),
     Scale(Box<Solid>, Vec3),
     Add(Vec<Solid>),
     Sub(Box<Solid>, Box<Solid>),
+    Hull(Vec<Solid>),
 }
 impl Solid {
-    fn to_scad(&self) -> String {
+    pub fn rotate(self, x: f32, y: f32, z: f32) -> Self {
+        Self::Rotate(Box::new(self), Vec3::new(x, y, z))
+    }
+
+    pub fn transform(self, x: f32, y: f32, z: f32) -> Self {
+        match self {
+            Self::Transform(inner, vec) => {
+                Self::Transform(inner, Vec3::new(x + vec.x, y + vec.y, z + vec.z))
+            }
+            _ => Self::Transform(Box::new(self), Vec3::new(x, y, z)),
+        }
+    }
+
+    pub fn hull(self, other: Solid) -> Self {
+        match self {
+            Self::Hull(mut inner) => {
+                inner.push(other);
+                Self::Hull(inner)
+            }
+            _ => Self::Hull(vec![self, other]),
+        }
+    }
+
+    pub fn to_scad(&self) -> String {
         match self {
             Self::Cube(size) => format!("cube([{},{},{}]);", size.x, size.y, size.z),
-            Self::Sphere(size) => format!("circle([{},0]);", size.x),
+            Self::Sphere(size) => format!("sphere([{},0]);", size),
             Self::Transform(inner, vec) => {
-                format!("transform([{},{}]) {}", vec.x, vec.y, inner.to_scad())
+                format!("translate([{},{}]) {}", vec.x, vec.y, inner.to_scad())
             }
             Self::Extrude(inner, depth) => {
                 format!("linear_extrude({depth}) {}", inner.to_scad())
@@ -80,7 +111,17 @@ impl Solid {
             }
             Self::Add(lhs) => {
                 format!(
-                    "union() {{ {} }}",
+                    "union() {{\n{}\n}}",
+                    lhs.iter()
+                        .map(|solid| solid.to_scad())
+                        .reduce(|acc, a| acc + "\n" + a.as_str())
+                        .unwrap()
+                        .to_owned()
+                )
+            }
+            Self::Hull(lhs) => {
+                format!(
+                    "hull() {{\n{}\n}}",
                     lhs.iter()
                         .map(|solid| solid.to_scad())
                         .reduce(|acc, a| acc + "\n" + a.as_str())
@@ -95,8 +136,22 @@ impl Solid {
                 format!("rotate_extrude({angle}) {{ {} }}", inner.to_scad(),)
             }
             Self::Rotate(inner, angle) => {
-                format!("rotate({angle}) {{ {} }}", inner.to_scad(),)
+                format!("rotate({}) {{ {} }}", angle.to_scad(), inner.to_scad(),)
             }
+        }
+    }
+}
+
+impl Add for Solid {
+    type Output = Solid;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        match self {
+            Solid::Add(mut vec) => {
+                vec.push(rhs);
+                Solid::Add(vec)
+            }
+            _ => Solid::Add(vec![self, rhs]),
         }
     }
 }
@@ -105,6 +160,7 @@ pub enum Plane {
     Square(Vec2),
     Circle(Vec1),
     Transform(Box<Plane>, Vec2),
+    Rotate(Box<Plane>, Vec1),
     Scale(Box<Plane>, Vec2),
     Add(Vec<Plane>),
     Sub(Box<Plane>, Box<Plane>),
@@ -112,11 +168,15 @@ pub enum Plane {
 }
 
 impl Plane {
-    fn square(size: Vec2) -> Plane {
-        Plane::Square(size)
+    pub fn square(x: f32, y: f32) -> Plane {
+        Plane::Square(Vec2::new(x, y))
     }
 
-    fn transform(self, x: f32, y: f32) -> Plane {
+    pub fn circle(r: f32) -> Plane {
+        Plane::Circle(r)
+    }
+
+    pub fn transform(self, x: f32, y: f32) -> Plane {
         match self {
             Plane::Transform(inner, vec) => {
                 Plane::Transform(inner, Vec2::new(x + vec.x, y + vec.y))
@@ -125,33 +185,40 @@ impl Plane {
         }
     }
 
-    fn scale(self, x: f32, y: f32) -> Plane {
+    pub fn rotate(self, angle: f32) -> Plane {
+        Plane::Rotate(Box::new(self), angle)
+    }
+
+    pub fn scale(self, x: f32, y: f32) -> Plane {
         Plane::Scale(Box::new(self), Vec2::new(x, y))
     }
 
-    fn extrude(self, length: f32) -> Solid {
+    pub fn extrude(self, length: f32) -> Solid {
         Solid::Extrude(Box::new(self), length)
     }
 
-    fn rotate_extrude(self, angle: f32) -> Solid {
-        Solid::Extrude(Box::new(self), angle)
+    pub fn rotate_extrude(self, angle: f32) -> Solid {
+        Solid::RotateExtrude(Box::new(self), angle)
     }
 
-    fn to_scad(&self) -> String {
+    pub fn to_scad(&self) -> String {
         match self {
-            Self::Square(size) => format!("square([{},{}]);", size.x, size.y),
-            Self::Circle(size) => format!("circle([{},0]);", size),
+            Self::Square(size) => format!("square({});", size.to_scad()),
+            Self::Circle(size) => format!("circle({});", size),
             Self::Transform(inner, vec) => {
-                format!("transform([{},{}]) {}", vec.x, vec.y, inner.to_scad())
+                format!("translate([{},{}])\n  {}", vec.x, vec.y, inner.to_scad())
             }
             Self::Scale(inner, vec) => {
                 format!("scale([{},{}]) {}", vec.x, vec.y, inner.to_scad())
             }
+            Self::Rotate(inner, angle) => {
+                format!("rotate({}) {}", angle, inner.to_scad())
+            }
             Self::Add(lhs) => {
                 format!(
-                    "union() {{ {} }}",
+                    "union() {{\n{}\n}}",
                     lhs.iter()
-                        .map(|solid| solid.to_scad())
+                        .map(|solid| "  ".to_owned() + solid.to_scad().as_str())
                         .reduce(|acc, a| acc + "\n" + a.as_str())
                         .unwrap()
                         .to_owned()
@@ -163,6 +230,9 @@ impl Plane {
 
             Self::Nest(inner) => inner.to_scad(),
         }
+        .lines()
+        .map(|line| format!("  {}\n", line))
+        .collect()
     }
 }
 
@@ -175,7 +245,7 @@ impl Add for Plane {
                 vec.push(rhs);
                 Plane::Add(vec)
             }
-            _ => Plane::Add(vec![rhs]),
+            _ => Plane::Add(vec![self, rhs]),
         }
     }
 }
@@ -200,7 +270,7 @@ mod tests {
 
     #[test]
     fn make_square() {
-        let square = Plane::square(Vec2::new(4.0, 4.0));
+        let square = Plane::square(4.0, 4.0);
         assert_eq!(square.to_scad(), "square([4,4]);");
         let cube = square
             .transform(12.0, 32.0)
