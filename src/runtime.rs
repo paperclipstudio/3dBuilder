@@ -44,13 +44,6 @@ where
     }
 }
 
-pub struct Test<const X: u8, const Y: u8> {}
-
-impl<const X: u8, const Y: u8> Test<X, Y> {
-    fn new() -> Test<X, Y> {
-        Test {}
-    }
-}
 pub trait SSolid: SItem {
     fn tran<const X: i8, const Y: i8>(self) -> Tran<X, Y, Self> {
         Tran::<X, Y, Self>::new()
@@ -187,5 +180,34 @@ impl<T: SItem> SItem for Rot<T> {
             Box::new(T::to_dynamic().unwrap_solid().unwrap()),
             0.0,
         ))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn recursion() {
+        fn donut<const N: i8, const X: i8, const Y: i8>() -> Tran<X, Y, Circle<N>> {
+            Circle::<N>::new().tran::<X, Y>()
+        }
+        let _ = donut::<10, 3, 3>().tran::<3, 4>();
+    }
+
+    #[test]
+    fn zero_sized() {
+        assert_eq!(0, size_of::<Rot<Tran<3, 4, Circle<4>>>>());
+    }
+
+    #[test]
+    fn basic_print() {
+        let a = Circle::<2>::new().tran::<3, 4>();
+        assert_eq!("Translate() circle(2);", a.print2());
+    }
+
+    #[test]
+    fn reduce() {
+        let _: Tran<5, 5, Circle<2>> = Circle::<2>::new().tran::<3, 4>().tran::<2, 1>().reduce();
     }
 }

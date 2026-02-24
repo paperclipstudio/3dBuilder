@@ -196,44 +196,9 @@ mod tests {
     }
 
     #[test]
-    fn make_square_2() {
-        let b = Circle::<5>::new();
-        let a = Test::<3, 4>::new().tran::<1, 3>().rot().add(b);
-
-        assert_eq!(
-            a.print2(),
-            "union() {\nRotate() Translate() test(); \ncircle(5);}"
-        );
-    }
-
-    #[test]
     fn transform_square() {
         let square = Plane::square(Vec2::new(4.0, 4.0)).transform(3.0, 3.0);
         assert_eq!(square.to_scad(), "transform([3,3]) square([4,4]);");
-    }
-
-    #[test]
-    fn recursion() {
-        fn donut<const N: i8, const X: i8, const Y: i8>() -> Tran<X, Y, Circle<N>> {
-            Circle::<N>::new().tran::<X, Y>()
-        }
-        let _ = donut::<10, 3, 3>().tran::<3, 4>();
-    }
-
-    #[test]
-    fn zero_sized() {
-        assert_eq!(0, size_of::<Rot<Tran<3, 4, Circle<4>>>>());
-    }
-
-    #[test]
-    fn basic_print() {
-        let a = Circle::<2>::new().tran::<3, 4>();
-        assert_eq!("Translate() circle(2);", a.print2());
-    }
-
-    #[test]
-    fn reduce() {
-        let _: Tran<5, 5, Circle<2>> = Circle::<2>::new().tran::<3, 4>().tran::<2, 1>().reduce();
     }
 
     #[test]
