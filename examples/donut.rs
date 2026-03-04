@@ -9,9 +9,7 @@ use std::ops::Sub;
 fn main() -> Result<(), std::io::Error> {
     let mut file = File::create("example.scad")?;
     let scad = donut().to_scad();
-
     println!("{}", scad);
-
     write!(file, "{}", scad)?;
     Ok(())
 }
@@ -26,14 +24,13 @@ const SIZE: f32 = 60.0;
 fn donut() -> Solid {
     let mut rng = rand::rng();
     let sprinkles = (0..100)
-        .map(|i| i as f32)
-        .map(|i| {
+        .map(|_| {
             sprinkle(0.0)
                 .rotate(0.0, rng.random::<f32>() * 360.0, 90.0)
                 .transform(SIZE / 3.0 + 2.0, 0.0, 0.0)
                 .rotate(0.0, rng.random::<f32>() * 100.0 + 30.0, 0.0)
                 .transform(2.0 * SIZE / 3.0, 0.0, 0.0)
-                .rotate(0.0, 0.0, i * 10.0)
+                .rotate(0.0, 0.0, rng.random::<f32>() * 360.0)
         })
         .reduce(|acc, x| acc + x)
         .unwrap();
@@ -45,7 +42,7 @@ fn donut() -> Solid {
         .rotate(360.0)
         .transform(2.0 * SIZE / 3.0, 0.0)
         .rotate_extrude(360.0);
-    (body + sprinkles + icing).transform(0.0, 0.0, -SIZE / 3.0) // END
+    (body + sprinkles + icing).transform(0.0, 0.0, -SIZE / 3.0)
 }
 /*
 $colours = ["red", "green", "blue", "yellow", "orange", "pink"];

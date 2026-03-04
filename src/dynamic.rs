@@ -124,6 +124,7 @@ impl Solid {
                     "hull() {{\n{}\n}}",
                     lhs.iter()
                         .map(|solid| solid.to_scad())
+                        .map(|line| format!("  {}", line))
                         .reduce(|acc, a| acc + "\n" + a.as_str())
                         .unwrap()
                         .to_owned()
@@ -133,10 +134,10 @@ impl Solid {
                 format!("difference() {{ {}  {} }}", lhs.to_scad(), rhs.to_scad())
             }
             Self::RotateExtrude(inner, angle) => {
-                format!("rotate_extrude({angle}) {{ {} }}", inner.to_scad(),)
+                format!("rotate_extrude({angle}) {} ", inner.to_scad(),)
             }
             Self::Rotate(inner, angle) => {
-                format!("rotate({}) {{ {} }}", angle.to_scad(), inner.to_scad(),)
+                format!("rotate({}) {} ", angle.to_scad(), inner.to_scad(),)
             }
         }
     }
