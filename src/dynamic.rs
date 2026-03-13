@@ -5,6 +5,7 @@ use std::ops::Add;
 
 pub(crate) type Vec1 = f32;
 
+#[derive(Clone, Copy)]
 pub struct Vec2 {
     x: f32,
     y: f32,
@@ -19,6 +20,7 @@ impl Vec2 {
     }
 }
 
+#[derive(Clone, Copy)]
 pub struct Vec3 {
     x: f32,
     y: f32,
@@ -43,26 +45,23 @@ pub struct Colour {
     a: u8,
 }
 impl Colour {
-    pub fn new(r:u8, g:u8, b:u8) -> Colour {
-     Colour {
-            r,g,b,a:255
-        }
+    pub fn new(r: u8, g: u8, b: u8) -> Colour {
+        Colour { r, g, b, a: 255 }
     }
 
-    pub fn new_alpha(r:u8, g:u8, b:u8, a:u8) -> Colour {
-     Colour {
-            r,g,b,a
-        }
+    pub fn new_alpha(r: u8, g: u8, b: u8, a: u8) -> Colour {
+        Colour { r, g, b, a }
     }
 }
 
 impl Scad for Colour {
     fn to_scad(&self) -> String {
-        format!("[{}, {},{},{}]",
-            self.r as f32/255.0,
-            self.g as f32/255.0,
-            self.b as f32/255.0,
-            self.a as f32/255.0,
+        format!(
+            "[{}, {},{},{}]",
+            self.r as f32 / 255.0,
+            self.g as f32 / 255.0,
+            self.b as f32 / 255.0,
+            self.a as f32 / 255.0,
         )
     }
 }
@@ -93,7 +92,7 @@ impl Dynamic {
 }
 
 pub enum Solid {
-    Extrude(Box<Plane>, f32),
+    Extrude(Box<Plane>, f32, f32),
     RotateExtrude(Box<Plane>, f32),
     Rotate(Box<Solid>, Vec3),
     Sphere(Vec1),
@@ -138,10 +137,10 @@ impl Solid {
             Self::Cube(size) => format!("cube([{},{},{}]);", size.x, size.y, size.z),
             Self::Sphere(size) => format!("sphere([{},0]);", size),
             Self::Transform(inner, vec) => {
-                format!("translate([{},{}]) {}", vec.x, vec.y, inner.to_scad())
+                format!("translate({}) {}", vec.to_scad(), inner.to_scad())
             }
-            Self::Extrude(inner, depth) => {
-                format!("linear_extrude({depth}) {}", inner.to_scad())
+            Self::Extrude(inner, depth, twist) => {
+                format!("linear_extrude({depth}, twist={twist}) {}", inner.to_scad(),)
             }
             Self::Scale(inner, vec) => {
                 format!("scale([{},{}]) {}", vec.x, vec.y, inner.to_scad())
@@ -197,9 +196,18 @@ impl Add for Solid {
     }
 }
 
+impl std::ops::Sub for Solid {
+    type Output = Solid;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        Self::Sub(Box::new(self), Box::new(rhs))
+    }
+}
+
 pub enum Plane {
     Square(Vec2),
     Circle(Vec1),
+    Polygon(Vec<Vec2>),
     Transform(Box<Plane>, Vec2),
     Rotate(Box<Plane>, Vec1),
     Scale(Box<Plane>, Vec2),
@@ -215,6 +223,10 @@ impl Plane {
 
     pub fn circle(r: f32) -> Plane {
         Plane::Circle(r)
+    }
+
+    pub fn polygon(points: Vec<Vec2>) -> Plane {
+        Plane::Polygon(points)
     }
 
     pub fn transform(self, x: f32, y: f32) -> Plane {
@@ -235,7 +247,11 @@ impl Plane {
     }
 
     pub fn extrude(self, length: f32) -> Solid {
-        Solid::Extrude(Box::new(self), length)
+        Solid::Extrude(Box::new(self), length, 0.0)
+    }
+
+    pub fn extrude_twist(self, length: f32, twist: f32) -> Solid {
+        Solid::Extrude(Box::new(self), length, twist)
     }
 
     pub fn rotate_extrude(self, angle: f32) -> Solid {
@@ -246,6 +262,14 @@ impl Plane {
         match self {
             Self::Square(size) => format!("square({});", size.to_scad()),
             Self::Circle(size) => format!("circle({});", size),
+            Self::Polygon(points) => format!(
+                "polygon([{}]);",
+                points
+                    .iter()
+                    .map(|vec2| format!("[{}, {}],", vec2.x, vec2.y))
+                    .reduce(|acc, a| acc + "\n" + a.as_str())
+                    .unwrap()
+            ),
             Self::Transform(inner, vec) => {
                 format!("translate([{},{}])\n  {}", vec.x, vec.y, inner.to_scad())
             }
@@ -328,7 +352,7 @@ mod tests {
 
     #[test]
     fn transform_square() {
-        let square = Plane::square(Vec2::new(4.0, 4.0)).transform(3.0, 3.0);
+        let square = Plane::square(4.0, 4.0).transform(3.0, 3.0);
         assert_eq!(square.to_scad(), "transform([3,3]) square([4,4]);");
     }
 
