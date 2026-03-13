@@ -35,6 +35,38 @@ impl Vec3 {
     }
 }
 
+#[derive(Clone, Copy)]
+pub struct Colour {
+    r: u8,
+    g: u8,
+    b: u8,
+    a: u8,
+}
+impl Colour {
+    pub fn new(r:u8, g:u8, b:u8) -> Colour {
+     Colour {
+            r,g,b,a:255
+        }
+    }
+
+    pub fn new_alpha(r:u8, g:u8, b:u8, a:u8) -> Colour {
+     Colour {
+            r,g,b,a
+        }
+    }
+}
+
+impl Scad for Colour {
+    fn to_scad(&self) -> String {
+        format!("[{}, {},{},{}]",
+            self.r as f32/255.0,
+            self.g as f32/255.0,
+            self.b as f32/255.0,
+            self.a as f32/255.0,
+        )
+    }
+}
+
 pub trait Scad {
     fn to_scad(&self) -> String;
 }
@@ -71,6 +103,7 @@ pub enum Solid {
     Add(Vec<Solid>),
     Sub(Box<Solid>, Box<Solid>),
     Hull(Vec<Solid>),
+    Colour(Box<Solid>, Colour),
 }
 impl Solid {
     pub fn rotate(self, x: f32, y: f32, z: f32) -> Self {
@@ -94,6 +127,10 @@ impl Solid {
             }
             _ => Self::Hull(vec![self, other]),
         }
+    }
+
+    pub fn colour(self, colour: Colour) -> Self {
+        Self::Colour(Box::new(self), colour)
     }
 
     pub fn to_scad(&self) -> String {
@@ -138,6 +175,9 @@ impl Solid {
             }
             Self::Rotate(inner, angle) => {
                 format!("rotate({}) {} ", angle.to_scad(), inner.to_scad(),)
+            }
+            Self::Colour(inner, colour) => {
+                format!("color({}) {} ", colour.to_scad(), inner.to_scad(),)
             }
         }
     }
