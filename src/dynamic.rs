@@ -103,7 +103,11 @@ pub enum Solid {
     Sub(Box<Solid>, Box<Solid>),
     Hull(Vec<Solid>),
     Colour(Box<Solid>, Colour),
+    Solo(Box<Solid>),
+    Construct(Box<Solid>),
+    Highlight(Box<Solid>),
 }
+
 impl Solid {
     pub fn rotate(self, x: f32, y: f32, z: f32) -> Self {
         Self::Rotate(Box::new(self), Vec3::new(x, y, z))
@@ -176,9 +180,28 @@ impl Solid {
                 format!("rotate({}) {} ", angle.to_scad(), inner.to_scad(),)
             }
             Self::Colour(inner, colour) => {
-                format!("color({}) {} ", colour.to_scad(), inner.to_scad(),)
+                format!("color({}) {} ", colour.to_scad(), inner.to_scad())
+            }
+            Self::Solo(inner) => {
+                format!("!{}", inner.to_scad())
+            }
+            Self::Construct(inner) => {
+                format!("%{}", inner.to_scad())
+            }
+            Self::Highlight(inner) => {
+                format!("#{}", inner.to_scad())
             }
         }
+    }
+
+    pub fn solo(self) -> Self {
+        Solid::Solo(Box::new(self))
+    }
+    pub fn construct(self) -> Self {
+        Solid::Construct(Box::new(self))
+    }
+    pub fn highlight(self) -> Self {
+        Solid::Highlight(Box::new(self))
     }
 }
 
