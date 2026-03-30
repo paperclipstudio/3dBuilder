@@ -132,12 +132,27 @@ impl Solid {
         Self::Colour(Box::new(self), colour)
     }
 
+    fn to_scad_inner(&self, result: &mut String) {
+        match self {
+            Self::Extrude(inner, depth, twist) => {
+                result.push_str(format!("linear_extrude({depth}, twist={twist}) ").as_str());
+                result.push_str(inner.to_scad().as_str());
+            }
+            _ => result.push_str(self.to_scad().as_str()),
+        }
+    }
+
     pub fn to_scad(&self) -> String {
+        let mut result = String::new();
         match self {
             Self::Cube(size) => format!("cube([{},{},{}]);", size.x, size.y, size.z),
-            Self::Sphere(size) => format!("sphere([{},0]);", size),
+            Self::Sphere(size) => format!("sphere({});", size),
             Self::Transform(inner, vec) => {
-                format!("translate({}) {}", vec.to_scad(), inner.to_scad())
+                result.push_str("translate(");
+                result.push_str(&vec.to_scad());
+                result.push_str(") ");
+                inner.to_scad_inner(&mut result);
+                result
             }
             Self::Extrude(inner, depth, twist) => {
                 format!("linear_extrude({depth}, twist={twist}) {}", inner.to_scad(),)
