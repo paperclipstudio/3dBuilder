@@ -14,9 +14,9 @@ fn main() -> Result<(), std::io::Error> {
 }
 
 fn sprinkle(colour: Colour) -> Solid {
-    Solid::Sphere(3.0)
+    Solid::Sphere(1.5)
         .transform(3.0, 0.0, 0.0)
-        .hull(Solid::Sphere(3.0).transform(-3.0, 0.0, 0.0))
+        .hull(Solid::Sphere(1.5).transform(-3.0, 0.0, 0.0))
         .colour(colour)
 }
 
