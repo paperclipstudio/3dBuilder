@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
-use crate::runtime::{SItem, Union};
+use crate::runtime::{SItem, Union,};
+use std::fmt::Write;
 use std::ops::Add;
 
 pub(crate) type Vec1 = f32;
@@ -132,68 +133,69 @@ impl Solid {
         Self::Colour(Box::new(self), colour)
     }
 
-    fn to_scad_inner(&self, result: &mut String) {
+    fn to_scad_inner(&self, result: &mut String) -> Result<(), std::fmt::Error> {
         match self {
+            Self::Cube(size) => write!(result, "cube([{},{},{}]);", size.x, size.y, size.z),
+            Self::Sphere(size) => write!(result,"sphere({});", size),
+            Self::Transform(inner, vec) => {
+                write!(result, "translate(")?;
+                write!(result, "{}", &vec.to_scad())?;
+                write!(result, ") ")?;
+                inner.to_scad_inner(result)
+            },
             Self::Extrude(inner, depth, twist) => {
-                result.push_str(format!("linear_extrude({depth}, twist={twist}) ").as_str());
-                result.push_str(inner.to_scad().as_str());
+                write!(result, "linear_extrude({depth}").unwrap();
+                if *twist != 0.0 {
+                    write!(result, ", twist={twist}").unwrap();
+                }
+                // TODO swap to to_scad_inner
+                write!(result, ") {}", inner.to_scad())
+            },
+            Self::Scale(inner, vec) => {
+                write!(result, "scale({}) ", vec.to_scad()).unwrap();
+                inner.to_scad_inner(result)
             }
-            _ => result.push_str(self.to_scad().as_str()),
+            Self::Add(lhs) => {
+                write!(result, "union() ").unwrap();
+                lhs.iter()
+                    .for_each(|c| {
+                        c.to_scad_inner(result).unwrap();
+                        writeln!(result).unwrap();
+                    });
+                Ok(())
+            }
+            Self::Hull(lhs) => {
+                write!(result, "hull() {{").unwrap();
+                lhs.iter()
+                    .for_each(|c| {
+                        c.to_scad_inner(result).unwrap();
+                        writeln!(result).unwrap();
+                    });
+                write!(result, "}}")
+            }
+            Self::Sub(lhs, rhs) => {
+                write!(result, "difference() {{")?;
+                lhs.to_scad_inner(result).unwrap();
+                write!(result, " ").unwrap();
+                rhs.to_scad_inner(result).unwrap();
+                write!(result, " }} ")
+            }
+            Self::RotateExtrude(inner, angle) => {
+                write!(result, "rotate_extrude({angle}) {}", inner.to_scad())
+            }
+            Self::Rotate(inner, angle) => {
+                write!(result, "rotate({}) {} ", angle.to_scad(), inner.to_scad())
+            }
+            Self::Colour(inner, colour) => {
+                write!(result, "color({}) {} ", colour.to_scad(), inner.to_scad())
+            }
         }
     }
 
     pub fn to_scad(&self) -> String {
         let mut result = String::new();
-        match self {
-            Self::Cube(size) => format!("cube([{},{},{}]);", size.x, size.y, size.z),
-            Self::Sphere(size) => format!("sphere({});", size),
-            Self::Transform(inner, vec) => {
-                result.push_str("translate(");
-                result.push_str(&vec.to_scad());
-                result.push_str(") ");
-                inner.to_scad_inner(&mut result);
-                result
-            }
-            Self::Extrude(inner, depth, twist) => {
-                format!("linear_extrude({depth}, twist={twist}) {}", inner.to_scad(),)
-            }
-            Self::Scale(inner, vec) => {
-                format!("scale([{},{}]) {}", vec.x, vec.y, inner.to_scad())
-            }
-            Self::Add(lhs) => {
-                format!(
-                    "union() {{\n{}\n}}",
-                    lhs.iter()
-                        .map(|solid| solid.to_scad())
-                        .reduce(|acc, a| acc + "\n" + a.as_str())
-                        .unwrap()
-                        .to_owned()
-                )
-            }
-            Self::Hull(lhs) => {
-                format!(
-                    "hull() {{\n{}\n}}",
-                    lhs.iter()
-                        .map(|solid| solid.to_scad())
-                        .map(|line| format!("  {}", line))
-                        .reduce(|acc, a| acc + "\n" + a.as_str())
-                        .unwrap()
-                        .to_owned()
-                )
-            }
-            Self::Sub(lhs, rhs) => {
-                format!("difference() {{ {}  {} }}", lhs.to_scad(), rhs.to_scad())
-            }
-            Self::RotateExtrude(inner, angle) => {
-                format!("rotate_extrude({angle}) {} ", inner.to_scad(),)
-            }
-            Self::Rotate(inner, angle) => {
-                format!("rotate({}) {} ", angle.to_scad(), inner.to_scad(),)
-            }
-            Self::Colour(inner, colour) => {
-                format!("color({}) {} ", colour.to_scad(), inner.to_scad(),)
-            }
-        }
+        self.to_scad_inner(&mut result).unwrap();
+        result
     }
 }
 
