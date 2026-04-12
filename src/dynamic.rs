@@ -44,6 +44,7 @@ pub struct Colour {
     b: u8,
     a: u8,
 }
+
 impl Colour {
     pub fn new(r: u8, g: u8, b: u8) -> Colour {
         Colour { r, g, b, a: 255 }

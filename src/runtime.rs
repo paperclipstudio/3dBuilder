@@ -3,6 +3,29 @@
 use crate::dynamic::*;
 use std::marker::PhantomData;
 
+trait ZeroSized: Sized {}
+
+pub struct SColour<T> {
+    phantom_data: PhantomData<T>,
+}
+
+impl<T> SColour<T> where T: SItem {}
+
+impl<T> SItem for SColour<T>
+where
+    T: SItem,
+{
+    fn new() -> SColour<T> {
+        SColour::<T> {
+            phantom_data: PhantomData,
+        }
+    }
+
+    fn print() -> String {
+        format!("COLOUR() {}", T::print())
+    }
+}
+
 pub struct Union<T, U> {
     phantom_data: PhantomData<T>,
     phantom_data2: PhantomData<U>,
@@ -26,18 +49,34 @@ where
     Y: SItem,
 {
     fn print() -> String {
-        format!("union() {{\n{} \n{}}}", X::print(), Y::print())
+        format!("union() {{ {} {} }}", X::print(), Y::print())
     }
 
     fn new() -> Self {
-        Self {
-            phantom_data: PhantomData::<X>,
-            phantom_data2: PhantomData::<Y>,
+        Union::<X, Y> {
+            phantom_data: PhantomData,
+            phantom_data2: PhantomData,
         }
     }
+}
 
-    fn to_dynamic() -> Dynamic {
-        Dynamic::Solid(Solid::Add(vec![X::to_dynamic().unwrap_solid().unwrap()]))
+impl<X, Y> SSolid for Union<X, Y>
+where
+    X: SSolid,
+    Y: SSolid,
+{
+    fn to_dynamic() -> Solid {
+        todo!()
+    }
+}
+
+impl<X, Y> Union<X, Y>
+where
+    X: SPlane,
+    Y: SPlane,
+{
+    fn to_dynamic() -> Plane {
+        Plane::Add(vec![X::to_dynamic()])
     }
 }
 
@@ -45,24 +84,28 @@ pub trait SSolid: SItem {
     fn tran<const X: i8, const Y: i8>(self) -> Tran<X, Y, Self> {
         Tran::<X, Y, Self>::new()
     }
+
+    fn to_dynamic() -> Solid;
 }
+
 pub trait SPlane: SItem {
     fn tran<const X: i8, const Y: i8>(self) -> Tran<X, Y, Self> {
         Tran::<X, Y, Self>::new()
     }
+
+    fn to_dynamic() -> Plane;
 }
 
 pub trait SItem: Sized {
-    fn rot(self) -> Rot<Self>
+    fn rot<const X: i8, const Y: i8, const Z: i8>(self) -> Rot<Self, X, Y, Z>
     where
         Self: Sized,
     {
-        Rot::<Self>::new()
+        Rot::<Self, X, Y, Z>::new()
     }
 
     fn print() -> String;
     fn new() -> Self;
-    fn to_dynamic() -> Dynamic;
 
     fn print2(&self) -> String {
         Self::print()
@@ -74,6 +117,10 @@ pub trait SItem: Sized {
 
     fn into<T: SItem>(self) -> T {
         T::new()
+    }
+
+    fn colour<T: SItem>(self) -> SColour<T> {
+        SColour::<T>::new()
     }
 }
 
@@ -100,48 +147,54 @@ where
     }
 }
 
-pub struct Rot<T> {
-    phantom_data: std::marker::PhantomData<T>,
+pub struct Rot<T, const X: i8, const Y: i8, const Z: i8> {
+    phantom_data: PhantomData<T>,
 }
 
-impl<T> Rot<T>
+impl<T, const X: i8, const Y: i8, const Z: i8> Rot<T, X, Y, Z>
 where
     T: SItem,
 {
-    fn new() -> Rot<T> {
-        Rot::<T> {
+    fn new() -> Rot<T, X, Y, Z> {
+        Rot::<T, X, Y, Z> {
             phantom_data: PhantomData,
         }
     }
 }
 
-impl<T> SSolid for Rot<T> where T: SItem {}
+impl<T, const X: i8, const Y: i8, const Z: i8> SSolid for Rot<T, X, Y, Z>
+where
+    T: SSolid,
+{
+    fn to_dynamic() -> Solid {
+        Solid::Rotate(
+            Box::new(T::to_dynamic()),
+            Vec3::new(X as f32, Y as f32, Z as f32),
+        )
+    }
+}
 
 pub struct Circle<const X: i8> {}
 
-impl<const X: i8> Circle<X> {
+impl<const X: i8> SItem for Circle<X> {
+    fn print() -> String {
+        format!("circle({});", X)
+    }
+
     fn new() -> Circle<X> {
         Circle::<X> {}
     }
 }
 
-impl<const X: i8> SItem for Circle<{ X }> {
-    fn print() -> String {
-        format!("circle({});", X)
-    }
+impl<const X: i8> Circle<X> {}
 
-    fn new() -> Self {
-        Circle::<X> {}
-    }
-
-    fn to_dynamic() -> Dynamic {
-        Dynamic::Plane(Plane::Circle(X as f32))
+impl<const X: i8> SPlane for Circle<{ X }> {
+    fn to_dynamic() -> Plane {
+        Plane::Circle(X as f32)
     }
 }
 
-impl<const X: i8> SPlane for Circle<{ X }> {}
-
-impl<const X: i8, const Y: i8, T: SItem> SItem for Tran<X, Y, T> {
+impl<const X: i8, const Y: i8, T: SPlane> SItem for Tran<X, Y, T> {
     fn print() -> String {
         format!("Translate() {}", T::print())
     }
@@ -151,38 +204,36 @@ impl<const X: i8, const Y: i8, T: SItem> SItem for Tran<X, Y, T> {
             phantom_data1: PhantomData,
         }
     }
+}
 
-    fn to_dynamic() -> Dynamic {
-        Dynamic::Plane(Plane::Transform(
-            Box::new(T::to_dynamic().unwrap_plane().unwrap()),
-            Vec2::new(X as f32, Y as f32),
-        ))
+impl<const X: i8, const Y: i8, T: SPlane> SPlane for Tran<X, Y, T> {
+    fn to_dynamic() -> Plane {
+        Plane::Transform(Box::new(T::to_dynamic()), Vec2::new(X as f32, Y as f32))
     }
 }
 
-impl<const X: i8, const Y: i8, T: SItem> SPlane for Tran<X, Y, T> {}
-
-impl<T: SItem> SItem for Rot<T> {
+impl<T: SItem, const X: i8, const Y: i8, const Z: i8> SItem for Rot<T, X, Y, Z> {
     fn print() -> String {
-        format!("Rotate() {}", T::print())
+        format!("Rotate({}, {}, {}) {}", X, Y, Z, T::print())
     }
 
     fn new() -> Self {
-        Rot::<T> {
+        Rot::<T, X, Y, Z> {
             phantom_data: PhantomData,
         }
     }
-    fn to_dynamic() -> Dynamic {
-        Dynamic::Solid(Solid::Rotate(
-            Box::new(T::to_dynamic().unwrap_solid().unwrap()),
-            Vec3::new(0.0, 0.0, 0.0),
-        ))
+}
+
+impl<T: SPlane, const X: i8, const Y: i8, const Z: i8> SPlane for Rot<T, X, Y, Z> {
+    fn to_dynamic() -> Plane {
+        Plane::Rotate(Box::new(T::to_dynamic()), 0.0)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::runtime::SPlane;
 
     #[test]
     fn recursion() {
@@ -194,7 +245,7 @@ mod tests {
 
     #[test]
     fn zero_sized() {
-        assert_eq!(0, size_of::<Rot<Tran<3, 4, Circle<4>>>>());
+        assert_eq!(0, size_of::<Rot<Tran<3, 4, Circle<4>>, 2, 3, 4>>());
     }
 
     #[test]
